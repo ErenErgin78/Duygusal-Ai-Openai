@@ -244,7 +244,7 @@
             } else {
                 setFaceFromText(s.text);
             }
-            addMessage(`${s.mood}: ${s.text}`, false);
+            addMessage(s.text, false);
             if (stepData.index >= stepData.steps.length - 1) {
                 document.getElementById('next-btn').disabled = true;
                 disableInput(false);
@@ -292,7 +292,7 @@
                 if (steps) {
                     stepData = { steps, index: 0 };
                     // Show first (server-provided emoji preferred)
-                    addMessage(`${steps[0].mood}: ${steps[0].text}`, false);
+                    addMessage(steps[0].text, false);
                     if (data.first_emoji) {
                         const node = document.getElementById('face-emoji');
                         if (node) {
