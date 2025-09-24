@@ -117,24 +117,3 @@ Tarayıcınızda şu adresi açın:
 ```
 http://localhost:8000/
 ```
-
----
-
-## Sorun Giderme
-
-### Yaygın Sorunlar
-
-**Bot yanıt vermiyor**: OpenAI API anahtarınızı kontrol edin
-
-**Emoji görünmüyor**: Tarayıcınızı yenileyin
-
-**Matrix animasyonu çok hızlı**: Kod içinde `matrixInterval` değerini artırın
-
----
-
-## Gelecek Özellikler
-- 🌍 Çok dilli destek
-- 👥 Kullanıcı hesapları
-- 📈 Gelişmiş istatistikler
-- 🎵 Sesli yanıtlar
-- 📱 Mobil uygulama
