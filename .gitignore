@@ -1,0 +1,36 @@
+﻿# Environment
+.env
+*.env
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.egg-info/
+.python-version
+.venv/
+venv/
+env/
+
+# IDE / Editor
+.vscode/
+.idea/
+*.swp
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Test/coverage
+.pytest_cache/
+.coverage*
+htmlcov/
+*.log
+
+# Node (just in case)
+node_modules/
+
+# Project data files (runtime artifacts)
+data/chat_history.txt
+data/mood_counter.txt

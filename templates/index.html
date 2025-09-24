@@ -1,0 +1,304 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Duygu Chatbot</title>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; background: #f5f5f5; }
+        .container { max-width: 800px; margin: 0 auto; background: white; padding: 20px; border-radius: 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
+        .face-container { width: 220px; height: 260px; margin: 0 auto 20px; background: #ffffff; border: 2px solid #e0e0e0; border-radius: 50%; box-shadow: inset 0 10px 30px rgba(0,0,0,0.07), 0 4px 12px rgba(0,0,0,0.06); display: grid; place-items: center; overflow: hidden; padding: 8px; }
+        .face-emoji { font-size: 96px; line-height: 1; transition: transform 200ms ease, opacity 200ms ease; white-space: nowrap; display: block; }
+        .face-emoji.anim { transform: scale(0.85); opacity: 0.2; }
+        .chat-box { height: 240px; border: 1px solid #ddd; padding: 12px; overflow-y: auto; margin-bottom: 10px; background: #fafafa; border-radius: 5px; }
+        .message { margin: 10px 0; padding: 10px; border-radius: 5px; max-width: 75%; }
+        .user { background: #007bff; color: white; text-align: right; margin-left: auto; }
+        .bot { background: #e9ecef; color: #333; margin-right: auto; }
+        .message pre { margin: 0; font-size: 14px; }
+        .input-area { display: flex; gap: 10px; }
+        .input-area input { flex: 1; padding: 10px; border: 1px solid #ddd; border-radius: 5px; }
+        .input-area button { padding: 10px 20px; background: #007bff; color: white; border: none; border-radius: 5px; cursor: pointer; }
+        .input-area button:hover { background: #0056b3; }
+        .stats { display: flex; gap: 20px; margin-top: 20px; }
+        .stat-box { background: #e9ecef; padding: 10px; border-radius: 5px; flex: 1; text-align: center; }
+        h1 { color: #333; text-align: center; }
+        .loading { color: #666; font-style: italic; }
+        pre { white-space: pre-wrap; word-break: break-word; }
+        .controls { display: flex; justify-content: center; margin-bottom: 12px; }
+        .next-btn { background: #ffcc00; color: #222; border: none; border-radius: 20px; padding: 8px 16px; cursor: pointer; box-shadow: 0 2px 6px rgba(0,0,0,0.1); }
+        .next-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+        .disabled { opacity: 0.7; pointer-events: none; }
+        .raw-response { margin-top: 16px; background: #fffdf5; border: 1px solid #f3e6b3; border-radius: 6px; padding: 10px; }
+        .raw-response h3 { margin: 0 0 6px 0; font-size: 14px; color: #8a6d3b; }
+        .request-debug { margin-top: 10px; background: #f7fbff; border: 1px solid #b3d7f3; border-radius: 6px; padding: 10px; }
+        .request-debug h3 { margin: 0 0 6px 0; font-size: 14px; color: #2a5885; }
+        
+        /* Responsive */
+        @media (max-width: 768px) {
+            body { margin: 12px; }
+            .container { max-width: 100%; padding: 14px; }
+            .face-container { width: 180px; height: 200px; padding: 6px; }
+            .face-emoji { font-size: 72px; }
+            .chat-box { height: 42vh; padding: 10px; }
+            .message { max-width: 90%; }
+            .input-area { flex-direction: column; gap: 8px; }
+            .input-area button { width: 100%; }
+            .stats { gap: 10px; }
+        }
+        
+        @media (max-width: 420px) {
+            h1 { font-size: 18px; }
+            .face-container { width: 150px; height: 170px; padding: 6px; }
+            .face-emoji { font-size: 56px; }
+            .chat-box { height: 44vh; }
+            .next-btn { padding: 6px 12px; }
+        }
+    </style>
+    <script>
+        // Step state for two-stage response
+        let stepData = null; // { steps: [{mood, text}, {mood, text}], index: 0 }
+
+        function extractFirstEmoji(text) {
+            try {
+                const regex = /[\u{1F600}-\u{1F64F}\u{1F300}-\u{1F5FF}\u{1F680}-\u{1F6FF}\u{1F700}-\u{1F77F}\u{1F780}-\u{1F7FF}\u{1F800}-\u{1F8FF}\u{1F900}-\u{1F9FF}\u{1FA00}-\u{1FAFF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}]/u;
+                const m = text.match(regex);
+                return m ? m[0] : null;
+            } catch (e) {
+                return null;
+            }
+        }
+
+        function setFaceFromText(text) {
+            const emoji = extractFirstEmoji(text) || '🙂';
+            const node = document.getElementById('face-emoji');
+            if (node) {
+                node.classList.add('anim');
+                setTimeout(() => {
+                    node.textContent = emoji;
+                    node.classList.remove('anim');
+                    fitFaceEmoji();
+                }, 150);
+            }
+        }
+
+        function fitFaceEmoji() {
+            const container = document.querySelector('.face-container');
+            const node = document.getElementById('face-emoji');
+            if (!container || !node) return;
+            const maxW = container.clientWidth - 16;
+            const maxH = container.clientHeight - 16;
+            let size = 96;
+            node.style.fontSize = size + 'px';
+            node.style.whiteSpace = 'nowrap';
+            for (let i = 0; i < 12; i++) {
+                const w = node.scrollWidth;
+                const h = node.scrollHeight;
+                if (w <= maxW && h <= maxH) break;
+                size = Math.max(24, Math.floor(size * 0.9));
+                node.style.fontSize = size + 'px';
+            }
+        }
+
+        function extractJsonObject(text) {
+            if (!text) return null;
+            text = text.replace(/```json|```/g, '').trim();
+            const start = text.indexOf('{');
+            if (start === -1) return null;
+            let depth = 0, inStr = false, esc = false, end = -1;
+            for (let i = start; i < text.length; i++) {
+                const ch = text[i];
+                if (inStr) {
+                    if (esc) { esc = false; }
+                    else if (ch === '\\') { esc = true; }
+                    else if (ch === '"') { inStr = false; }
+                } else {
+                    if (ch === '"') inStr = true;
+                    else if (ch === '{') depth++;
+                    else if (ch === '}') {
+                        depth--;
+                        if (depth === 0) { end = i; break; }
+                    }
+                }
+            }
+            if (end === -1) return null;
+            const candidate = text.substring(start, end + 1);
+            try { return JSON.parse(candidate); } catch (_) { return null; }
+        }
+
+        function disableInput(disabled) {
+            const input = document.getElementById('user-input');
+            const btn = document.getElementById('send-btn');
+            if (input) input.disabled = disabled;
+            if (btn) btn.disabled = disabled;
+        }
+
+        function showNextStep() {
+            if (!stepData) return;
+            if (stepData.index >= stepData.steps.length - 1) return;
+            stepData.index += 1;
+            const s = stepData.steps[stepData.index];
+            if (window.__lastResponseSecondEmoji) {
+                const node = document.getElementById('face-emoji');
+                if (node) {
+                    node.classList.add('anim');
+                    setTimeout(() => { node.textContent = window.__lastResponseSecondEmoji; node.classList.remove('anim'); fitFaceEmoji(); }, 150);
+                }
+            } else {
+                setFaceFromText(s.text);
+            }
+            addMessage(`${s.mood}: ${s.text}`, false);
+            if (stepData.index >= stepData.steps.length - 1) {
+                document.getElementById('next-btn').disabled = true;
+                disableInput(false);
+            }
+        }
+
+        async function sendMessage() {
+            const input = document.getElementById('user-input');
+            const message = input.value.trim();
+            if (!message) return;
+
+            addMessage(message, true);
+            input.value = '';
+            addLoadingMessage();
+            setFaceFromText('🤔');
+            disableInput(true);
+
+            try {
+                const resp = await fetch('/chat', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ message })
+                });
+                const data = await resp.json();
+                removeLoadingMessage();
+
+                if (data.error) {
+                    addMessage('Hata: ' + data.error, false);
+                    disableInput(false);
+                    return;
+                }
+
+                // En altta ham AI yanıtını göster
+                const raw = document.getElementById('raw-content');
+                if (raw) raw.textContent = data.response;
+                const reqDbg = document.getElementById('request-debug-content');
+                if (reqDbg) reqDbg.textContent = data.request_debug || '';
+
+                // Try parse JSON (ilk/ikinci ruh hali-cevap), fallback to plain text
+                let steps = null;
+                const j = extractJsonObject(data.response);
+                if (j && j.ilk_ruh_hali && j.ilk_cevap && j.ikinci_ruh_hali && j.ikinci_cevap) {
+                    steps = [
+                        { mood: j.ilk_ruh_hali, text: j.ilk_cevap },
+                        { mood: j.ikinci_ruh_hali, text: j.ikinci_cevap }
+                    ];
+                }
+
+                if (steps) {
+                    stepData = { steps, index: 0 };
+                    // Show first (server-provided emoji preferred)
+                    addMessage(`${steps[0].mood}: ${steps[0].text}`, false);
+                    if (data.first_emoji) {
+                        const node = document.getElementById('face-emoji');
+                        if (node) {
+                            node.classList.add('anim');
+                            setTimeout(() => { node.textContent = data.first_emoji; node.classList.remove('anim'); fitFaceEmoji(); }, 150);
+                        }
+                    } else {
+                        setFaceFromText(steps[0].text);
+                    }
+                    const nextBtn = document.getElementById('next-btn');
+                    nextBtn.disabled = false;
+                    // second emoji cache for next step
+                    window.__lastResponseSecondEmoji = data.second_emoji || null;
+                } else {
+                    // Plain text behavior
+                    addMessage(data.response, false);
+                    if (data.first_emoji) {
+                        const node = document.getElementById('face-emoji');
+                        if (node) {
+                            node.classList.add('anim');
+                            setTimeout(() => { node.textContent = data.first_emoji; node.classList.remove('anim'); fitFaceEmoji(); }, 150);
+                        }
+                    } else {
+                        setFaceFromText(data.response);
+                    }
+                    disableInput(false);
+                }
+
+                if (data.stats) {
+                    document.getElementById('req-count').textContent = data.stats.requests;
+                }
+            } catch (e) {
+                removeLoadingMessage();
+                addMessage('Bağlantı hatası: ' + e.message, false);
+                setFaceFromText('😵');
+                disableInput(false);
+            }
+        }
+
+        function addMessage(content, isUser) {
+            const chatBox = document.getElementById('chat-box');
+            const messageDiv = document.createElement('div');
+            messageDiv.className = 'message ' + (isUser ? 'user' : 'bot');
+            messageDiv.innerHTML = '<pre>' + content + '</pre>';
+            chatBox.appendChild(messageDiv);
+            chatBox.scrollTop = chatBox.scrollHeight;
+        }
+
+        function addLoadingMessage() {
+            const chatBox = document.getElementById('chat-box');
+            const messageDiv = document.createElement('div');
+            messageDiv.className = 'message bot loading';
+            messageDiv.id = 'loading-message';
+            messageDiv.textContent = 'Model düşünüyor...';
+            chatBox.appendChild(messageDiv);
+            chatBox.scrollTop = chatBox.scrollHeight;
+        }
+
+        function removeLoadingMessage() {
+            const loadingMsg = document.getElementById('loading-message');
+            if (loadingMsg) loadingMsg.remove();
+        }
+
+        function handleKeyPress(event) {
+            if (event.key === 'Enter') sendMessage();
+        }
+        window.addEventListener('resize', fitFaceEmoji);
+        window.addEventListener('load', fitFaceEmoji);
+    </script>
+    </head>
+<body>
+    <div class="container">
+        <h1>🤖 Duygu Chatbot (FastAPI)</h1>
+        <div class="face-container">
+            <div id="face-emoji" class="face-emoji">🙂</div>
+        </div>
+        <div class="controls">
+            <button id="next-btn" class="next-btn" onclick="showNextStep()" disabled>▶ Sonraki</button>
+        </div>
+        <div id="chat-box" class="chat-box"></div>
+        <div class="input-area">
+            <input type="text" id="user-input" placeholder="Mesajınızı yazın..." onkeypress="handleKeyPress(event)">
+            <button id="send-btn" onclick="sendMessage()">Gönder</button>
+        </div>
+        <div class="stats">
+            <div class="stat-box">
+                <strong>İstekler</strong><br>
+                <span id="req-count">0</span>
+            </div>
+        </div>
+        <div class="raw-response">
+            <h3>AI Ham Yanıt</h3>
+            <pre id="raw-content"></pre>
+        </div>
+        <div class="request-debug">
+            <h3>API'ye Gönderilen Mesajlar</h3>
+            <pre id="request-debug-content"></pre>
+        </div>
+    </div>
+</body>
+</html>
+
+
