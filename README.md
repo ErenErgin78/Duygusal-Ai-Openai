@@ -86,6 +86,7 @@ Sistem promptu, modele ilk ve ikinci duygu/cevabı belirli JSON şemasında üre
 Beklenen JSON şeması:
 ```json
 {
+  "kullanici_ruh_hali": "...",
   "ilk_ruh_hali": "...",
   "ilk_cevap": "...",
   "ikinci_ruh_hali": "...",

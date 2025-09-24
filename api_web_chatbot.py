@@ -21,9 +21,11 @@ Görevin şunlardır:
 3. Ardından ilk duygu ile uyumlu bir ikinci duygu seç; gerekirse aynı duyguyu tekrar seçebilirsin.
 4. Seçilen ikinci duyguya uygun bir ikinci cevap yaz (ilk yanıtla tutarlı olmalıdır).
 5. Çıktıyı Türkçe ver ve her iki yanıt da sadece 1 cümle olmalıdır.
+6. Ek olarak, kullanıcının verdiği mesajdan kullanıcının duygu durumunu tek bir etiket ile belirle.
 6. Çıktıyı her zaman aşağıdaki JSON formatında ver:
 
 {
+  "kullanici_ruh_hali": "...",
   "ilk_ruh_hali": "...",
   "ilk_cevap": "...",
   "ikinci_ruh_hali": "...",
@@ -34,10 +36,11 @@ Seçilebilecek ruh halleri:
 Mutlu, Üzgün, Öfkeli, Şaşkın, Utanmış, Endişeli, Gülümseyen, Flörtöz, Sorgulayıcı, Sorgulayıcı, Yorgun
 
 EK KURALLAR (İstatistik Sorguları):
-- Kullanıcı istatistik veya özet isterse (ör. "bugün en çok hangi duygu", "kaç kez öfkeli", "duygu istatistikleri"), sınıflandırma JSON'u üretmek yerine şu fonksiyonu çağır:
-  - get_emotion_stats
-  - period argümanı: Kullanıcı mesajında "bugün" geçiyorsa "today"; aksi halde "all" kullan.
-- Fonksiyonun dönüşünden sonra sadece 1 cümlelik, Türkçe, kısa bir özet yaz ve JSON döndürme.
+- Sadece kullanıcı AÇIKÇA istatistik/özet isterse sınıflandırma JSON'u üretmek yerine şu fonksiyonu çağır: `get_emotion_stats`.
+  - Açıkça istatistik/özet isteme anahtar kelimeleri: "en çok", "istatistik", "özet", "toplam", "kaç kez", "kaç kere", "en sık".
+  - Normal duygu/sohbet mesajlarında ASLA fonksiyon çağırma.
+  - `period` argümanı: İstatistik sorgusunda "bugün"/"günlük" geçiyorsa "today"; aksi halde "all".
+- Fonksiyonun dönüşünden sonra sadece 1 cümlelik, Türkçe, kısa bir özet yaz ve JSON döndürme. Bu kural YALNIZCA istatistik sorguları için geçerlidir.
 """
 
 
@@ -166,8 +169,11 @@ class EmotionChatbot:
                         except Exception:
                             data = None
                         if isinstance(data, dict):
+                            um = str(data.get("kullanici_ruh_hali", "")).strip()
                             m1 = str(data.get("ilk_ruh_hali", "")).strip()
                             m2 = str(data.get("ikinci_ruh_hali", "")).strip()
+                            if um in counts:
+                                counts[um] += 1
                             if m1 in counts:
                                 counts[m1] += 1
                             if m2 in counts:
@@ -309,7 +315,7 @@ class EmotionChatbot:
             self.messages.append({"role": "assistant", "content": content})
             return {"response": content, "request_debug": request_debug}
 
-        required_keys = {"ilk_ruh_hali", "ilk_cevap", "ikinci_ruh_hali", "ikinci_cevap"}
+        required_keys = {"kullanici_ruh_hali", "ilk_ruh_hali", "ilk_cevap", "ikinci_ruh_hali", "ikinci_cevap"}
         missing = [k for k in required_keys if k not in data]
         if missing:
             # Ham chat'i kaydet
@@ -322,9 +328,11 @@ class EmotionChatbot:
             if key in self.emotion_counts:
                 self.emotion_counts[key] += 1
 
+        user_mood_raw = str(data.get("kullanici_ruh_hali", ""))
         first_mood_raw = str(data.get("ilk_ruh_hali", ""))
         second_mood_raw = str(data.get("ikinci_ruh_hali", ""))
 
+        inc(user_mood_raw)
         inc(first_mood_raw)
         inc(second_mood_raw)
         # Sayaçları kalıcı kaydet
