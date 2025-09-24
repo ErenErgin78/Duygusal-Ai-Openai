@@ -1,181 +1,140 @@
-## Duygu Sınıflandırma Web Chatbot (FastAPI)
+# Duygusal AI Bot - Duygu Analizi Chatbotu
 
-Bu proje, FastAPI tabanlı bir web servisi ve basit bir HTML arayüzü ile kullanıcı mesajlarından duygu sınıflandırması yapan ve iki aşamalı yanıt üreten bir chatbot içerir. Model, ilk duyguyu ve ona uygun cevabı üretir; ardından ilk duygu ile uyumlu (gerekirse aynı) ikinci bir duygu ve ona uygun ikinci cevabı üretir. Arayüz, ilk adımı gösterir; kullanıcı ok tuşu ile ikinci adıma geçer.
+Bu proje, yapay zeka kullanarak kullanıcı mesajlarındaki duyguları analiz eden ve iki aşamalı yanıt veren bir chatbot'tur. Bot, mesajınızdaki duyguyu tespit eder, ona uygun bir cevap verir, sonra ikinci bir duygu ve cevap daha sunar. Kullanıcı "Sonraki" butonu ile ikinci aşamaya geçebilir.
 
-### Özellikler
-- OpenAI sohbet tamamlamaları ile sistem prompt’lu duygu sınıflandırma
-- İki adımda gösterim: ilk duygu/cevap → ikinci duygu/cevap
-- AI yanıtından emoji çıkarımı ve ortadaki eliptik yüz üzerinde gösterim (animasyonlu)
-- JSON olmayan/çıtalı (code fence) çıktılara karşı sağlam JSON ayıklama (hem backend hem frontend)
-- Duygu sayaçları: “3 kez öfkeli, 4 kez mutlu” gibi özet fonksiyonu (AI function calling ile tetiklenebilir) ve TXT’ye kalıcı yazma
-- Ek gösterim: sayfa sonunda ham AI yanıtının metin olarak gösterimi
-- Duyguya göre rastgele emoji seçimi: `mood_emojis.json`’dan iki duygu için iki emoji seçilir ve UI’da adım adım gösterilir
+## Özellikler
+
+- 🤖 **Akıllı Duygu Analizi**: Mesajınızdaki duyguyu tespit eder ve size uygun yanıt verir
+- 🎭 **İki Aşamalı Yanıt**: İlk duygu/cevap → ikinci duygu/cevap (uyumlu veya aynı duygu)
+- 😊 **Kullanıcı Duygu Takibi**: Sizin mesajınızdaki duygunuzu da kaydeder
+- 🎨 **Görsel Arayüz**: Ortadaki yüz emojisi ile duygu gösterimi (animasyonlu)
+- 📊 **İstatistikler**: "Bugün en çok hangi duyguyu yaşadın?" gibi sorulara yanıt verir
+- 🌙 **Karanlık Mod**: Tema değiştirme butonu ile aydınlık/karanlık geçiş
+- 🌧️ **Matrix Animasyonu**: Arka planda Matrix tarzı kod yağmuru efekti
+- 📱 **Mobil Uyumlu**: Telefon ve tablette de çalışır
 
 ---
 
-## Dosya Yapısı
+## Proje Dosyaları
 
 ```
-hafta_2/
-  api_web_chatbot.py        # FastAPI uygulaması ve chatbot sınıfı
+Duygusal-Ai-Openai/
+  api_web_chatbot.py        # Ana uygulama (Python)
   templates/
-    index.html             # Web arayüzü (HTML + inline CSS/JS)
+    index.html             # Web sayfası (HTML + CSS + JavaScript)
   data/
-    mood_emojis.json       # Duygu → emoji/kaomoji veri kaynağı
-    chat_history.txt       # Her istek için tek satır JSON (timestamp, user, response)
-    mood_counter.txt       # Duygu sayaçları (JSON) - kalıcı depolama
-  README_emotion_chatbot.md# Bu doküman
-```
-
-Diğer örnek dosyalar (`06_function_calling.py`, `07_chatbot_with_functions.py`, `09_web_chatbot.py` vb.) hocanın örneklerini içerir; bu proje onlara mimari olarak benzer, ancak FastAPI ve özel arayüz davranışları ile ayrışır.
-
----
-
-## Mimari
-
-### 1) API Katmanı (`api_web_chatbot.py`)
-- FastAPI uygulaması `app` ve global `chatbot_instance` oluşturulur (durum tutarlılığı için tekil örnek).
-- Endpoint’ler:
-  - GET `/` → `templates/index.html` döner (statik HTML arayüz)
-  - POST `/chat` → `{ message: string }` alır, modeli çağırır, şu formatta yanıt döner:
-    ```json
-    {
-      "response": "<modelin döndürdüğü metin veya JSON string>",
-      "stats": { "requests": number, "last_request_at": string }
-    }
-    ```
-
-### 2) Chatbot Sınıfı (`EmotionChatbot`)
-- Alanlar:
-  - `messages`: OpenAI mesaj geçmişi (system + user + assistant + function)
-  - `stats`: istek sayacı ve son istek zamanı
-  - `allowed_moods`: desteklenen duygu isimleri (UI/raporlama için)
-  - `emotion_counts`: duygu sayaçları (Mutlu, Üzgün, Öfkeli, Şaşkın, …)
-- Metotlar:
-  - `get_functions()`: AI function calling için fonksiyon şemaları (şu an `get_emotion_stats`)
-  - `get_emotion_stats()`: sayaçlardan özet üretir ("3 kez mutlu, 1 kez üzgün" gibi)
-  - `chat(user_message: str) -> str`: 
-    - Sistem promptu ve kullanıcı mesajı ile `gpt-3.5-turbo` çağrısı
-    - `function_call="auto"` ile AI fonksiyon seçerse `get_emotion_stats` çalıştırılır
-    - Aksi halde model yanıtından JSON ayıklanır; varsa ilk/ikinci duygu sayaçları artar, `mood_counter.txt` güncellenir
-    - `mood_emojis.json`’dan iki duygu için iki emoji rastgele seçilir ve `first_emoji`/`second_emoji` ile birlikte dönülür
-    - Yanıt, JSON string veya düz metin olarak `response` alanında dönülür
-    - JSON ayıklama: code fence temizleme + ilk `{` ile son `}` aralığını parse etme (backend) ve yedek olarak frontend’de aynı mantık
-  - Kalıcılık yardımcıları:
-    - `_load_mood_counts()`: `data/mood_counter.txt`’yi yükleyip sayacı başlatır
-    - `_save_mood_counts()`: güncel sayaçları JSON olarak dosyaya yazar
-    - `_append_chat_history(user, response)`: her isteği `data/chat_history.txt`’ye tek satır JSON olarak ekler
-
-### 3) Arayüz (`templates/index.html`)
-- Eliptik yüz (ortada) ve içinde emoji; emoji değişiminde küçük scale/opacity animasyonu
-- Mesaj kutusu, Gönder butonu ve “▶ Sonraki” kontrolü
-- Akış:
-  1. Kullanıcı mesaj gönderir → input devre dışı (bekleme)
-  2. Model yanıtı geldiğinde sayfa altında ham yanıt gösterilir (debug/şeffaflık)
-  3. JSON ise iki adım çıkarılır: ilk duygu/cevap hemen gösterilir, duyguya göre gelen `first_emoji` yüz alanında gösterilir; “▶ Sonraki” ile ikinci adım gösterilir ve `second_emoji` kullanılır (bu sırada input kapalı kalır)
-  4. İkinci adım gösterildikten sonra input tekrar açılır
-- JSON tespit edilemezse düz metin mesaj ve emoji gösterilir
-- Kaomoji taşmasını engellemek için yüz alanı otomatik olarak sığdırılır; büyük `(O_O)` gibi ifadeler ölçeklenir.
-
----
-
-## Sistem Prompt
-
-Sistem promptu, modele ilk ve ikinci duygu/cevabı belirli JSON şemasında üretmesini söyler (Türkçe ve tek cümle kısıtları dahil). İkinci duygu, ilk duygu ile uyumlu olmalı; gerekirse tamamen aynı duygu da seçilebilir. Prompt, backend içinde dinamik olarak `{text}` ile kullanıcının mesajını yerleştirerek iletilir.
-
-Beklenen JSON şeması:
-```json
-{
-  "kullanici_ruh_hali": "...",
-  "ilk_ruh_hali": "...",
-  "ilk_cevap": "...",
-  "ikinci_ruh_hali": "...",
-  "ikinci_cevap": "..."
-}
+    mood_emojis.json       # Duygu emojileri veritabanı
+    chat_history.txt       # Konuşma geçmişi
+    mood_counter.txt       # Duygu istatistikleri
+  requirements.txt         # Gerekli Python paketleri
+  .env                     # Gizli ayarlar (OpenAI API anahtarı)
+  README.md               # Bu dosya
 ```
 
 ---
 
-## Veri Kaynağı: `data/mood_emojis.json`
+## Nasıl Çalışır?
 
-Seçili duyguya uygun yüz odaklı (kol içermeyen) emoji/kaomoji listeleri içerir. Başlıca başlıklar: `Mutlu`, `Üzgün`, `Öfkeli`, `Şaşkın`, `Utanmış`, `Endişeli`, `Gülümseyen`, `Flörtöz`, `Sorgulayıcı`, `Yorgun`.
+### 1) Web Sunucusu
+- Python ile çalışan web sunucusu
+- Kullanıcı mesajlarını alır, OpenAI'ye gönderir, yanıt döner
+- İki endpoint: ana sayfa (`/`) ve chat (`/chat`)
 
-Arayüz şu an bot cevabından ilk emojiyi çıkarıp yüz üzerinde gösterir. İstenirse bu dosyadan duyguya göre rastgele emoji seçilerek yüz güncellenebilir.
+### 2) Yapay Zeka Motoru
+- OpenAI GPT-3.5-turbo modeli kullanır
+- Son 3 konuşmayı hatırlar (bağlam için)
+- Duygu analizi yapar ve iki aşamalı yanıt üretir
+- İstatistik sorularını anlar ve veritabanından yanıt verir
 
-Sunucu tarafı güncel davranış: AI’nin döndürdüğü iki duyguya karşılık bu dosyadan rastgele iki emoji seçilir ve `first_emoji`, `second_emoji` olarak frontend’e gönderilir. Frontend ilk adımda `first_emoji`, ikinci adımda `second_emoji` kullanır; yoksa metinden emoji çıkarımı fallback’tir.
-
----
-
-## API Detayları
-
-### POST /chat
-- İstek:
-  ```json
-  { "message": "Bugün biraz gerginim ama umutluyum." }
-  ```
-- Yanıt (örnek, JSON üretildiyse):
-  ```json
-  {
-    "response": "{\n  \"ilk_ruh_hali\": \"Endişeli\",\n  \"ilk_cevap\": \"...\",\n  \"ikinci_ruh_hali\": \"Mutlu\",\n  \"ikinci_cevap\": \"...\"\n}",
-    "first_emoji": "😟",
-    "second_emoji": "😊",
-    "stats": { "requests": 3, "last_request_at": "2025-09-24 12:34:56" }
-  }
-  ```
-- Yanıt (JSON değilse):
-  ```json
-  { "response": "...düz metin...", "stats": { ... } }
-  ```
+### 3) Kullanıcı Arayüzü
+- **Ortadaki Yüz**: Duygu emojisi gösterir (animasyonlu)
+- **Chat Kutusu**: Konuşma geçmişi
+- **Giriş Alanı**: Mesaj yazma ve gönderme
+- **Sonraki Butonu**: İkinci aşamaya geçiş
+- **Tema Butonu**: Aydınlık/karanlık mod
+- **Matrix Efekti**: Arka plan animasyonu
 
 ---
 
-## Çalıştırma
+## Duygu Sistemi
 
-1) Kurulum (sanal ortam açıkken):
-```
+Bot şu duyguları tanır ve analiz eder:
+
+**Temel Duygular**: Mutlu, Üzgün, Öfkeli, Şaşkın, Utanmış, Endişeli, Gülümseyen, Flörtöz, Sorgulayıcı, Yorgun
+
+---
+
+## Emoji Veritabanı
+
+Her duygu için özel emoji ve kaomoji (metin yüzler) koleksiyonu:
+
+**Örnek**: Mutlu → 😊, 😄, ^_^, (◠‿◠)
+
+Bot, her duygu için rastgele emoji seçer ve yüz alanında gösterir.
+
+---
+
+## Kullanım Örnekleri
+
+### Normal Konuşma
+- **Siz**: "Bugün çok mutluyum!"
+- **Bot**: İlk aşama: "Mutlu: Harika! Bu güzel haberi duymak beni de mutlu ediyor."
+- **Siz**: "Sonraki" butonuna basın
+- **Bot**: İkinci aşama: "Gülümseyen: Bu pozitif enerjinizi koruyun!"
+
+### İstatistik Sorguları
+- **Siz**: "Bugün en çok hangi duyguyu yaşadım?"
+- **Bot**: "Bugün 3 kez mutlu, 1 kez endişeli duygularınızı yaşadınız."
+
+---
+
+## Kurulum ve Çalıştırma
+
+### 1. Gereksinimler
+- Python 3.8+ yüklü olmalı
+- OpenAI API anahtarı gerekli
+
+### 2. Kurulum
+```bash
+# Gerekli paketleri yükle
 pip install -r requirements.txt
 ```
 
-2) Ortam değişkeni:
+### 3. API Anahtarı
+`.env` dosyasını düzenleyin:
 ```
-OPENAI_API_KEY=your_openai_api_key_here
-```
-
-3) Sunucu:
-```
-uvicorn api_web_chatbot:app --host 0.0.0.0 --port 8000 --reload
+OPENAI_API_KEY=sk-your-api-key-here
 ```
 
-4) Tarayıcı:
+### 4. Çalıştırma
+```bash
+# Sunucuyu başlat
+python -m uvicorn api_web_chatbot:app --host 0.0.0.0 --port 8000 --reload
+```
+
+### 5. Kullanım
+Tarayıcınızda şu adresi açın:
 ```
 http://localhost:8000/
 ```
 
 ---
 
-## Hata Yönetimi ve Sağlamlık
-- Backend ve frontend, code fence/ek metin içeren model çıktılarında JSON bloğunu güvenle ayıklamaya çalışır.
-- JSON anahtarları eksikse düz metin akışına düşer.
-- Ağ/parse hatalarında UI input tekrar aktif edilir ve kullanıcı bilgilendirilir.
-- TXT kalıcılıkta yazma hataları sessizce yutulur (kullanıcı akışı kesilmez); detaylı loglama ihtiyaca göre eklenebilir.
+## Sorun Giderme
+
+### Yaygın Sorunlar
+
+**Bot yanıt vermiyor**: OpenAI API anahtarınızı kontrol edin
+
+**Emoji görünmüyor**: Tarayıcınızı yenileyin
+
+**Matrix animasyonu çok hızlı**: Kod içinde `matrixInterval` değerini artırın
 
 ---
 
-## Sık Karşılaşılan Sorular
-
-### Model fonksiyonları kendisi mi seçiyor?
-Evet. `function_call="auto"` ile AI gerekli gördüğünde `get_emotion_stats` fonksiyonunu çağırır; biz sadece sonucu işleyip final metin döndürürüz.
-
-### Neden yanıt metni bazı zamanlar alt bölümde JSON gibi görünüyor?
-Model her zaman saf JSON döndürmeyebilir. Arayüz, bu metinden JSON’u ayıklayıp iki aşamalı gösterim yapmayı dener; yine de ham yanıt altta referans için gösterilir.
-
----
-
-## Geliştirme Fikirleri
-- Duygu sayaçlarının kullanıcı oturumlarına göre ayrılması (ID bazlı)
-- `chat_history.txt` için döküm/filtreleme aracı (tarih, kullanıcı metni, duygu)
-- Duygu sayaçlarının kalıcı depolanması (ör. SQLite)
-- Streaming yanıt (parça parça gösterim)
-- Çok dillilik ve daha fazla duygu kategorisi
-
-
+## Gelecek Özellikler
+- 🌍 Çok dilli destek
+- 👥 Kullanıcı hesapları
+- 📈 Gelişmiş istatistikler
+- 🎵 Sesli yanıtlar
+- 📱 Mobil uygulama
